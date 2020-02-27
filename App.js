@@ -1,75 +1,69 @@
-/*import React,{Component} from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-//import StopList from './components/StopList';
-import axios from 'axios';
+import React, { Component } from "react";  
+import { StyleSheet, View, TextInput, Text, Alert ,Button, ScrollView} from "react-native";  
+  
+class App extends Component {  
+	constructor(props) {
+		super(props)
+		this.state = {
+			AnswerText:'helloo all',
+			TextInputValueSource: '',
+			TextInputValueDestination: '',
+		}
+	}
 
-class App extends Component{
-  render(){
-    return(
-      <View style={styles.container}>
-      axios.get('http://localhost:5000/routes')
-     	.then(
-  	(response) => {
-    		console.log(response)
-  	})
-	.catch(
-  	(error) => {
-    		console.log('error')
-  	});
-    </View>
-    );
-  }
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
-
-
-export default App;*/
-
-
-import React from 'react';
-import axios from 'axios';
-
-export default class Requests extends React.Component {
-  state = {
-    nameList: []
-  }// make the GET request to fetch data from the URL then using promise function to handle response.
-   
-   componentDidMount() {
-    /*fetch('http://192.168.43.231:5000/routes')
-      .then(res => {
-      	//console.log(res.data);
-        //const nameList = res.data;
-        //this.setState({ nameList });
-        const 
-      })
-      .catch(
-  	(error) => {
-    		console.log(error)
-  	});*/
-  	fetch('http://192.168.43.231:5000/routes')
-	.then((response) => response.json())
-	.then((responseJson) => {
-    		console.log(responseJson)
-    	});
-  }
-
-  render() {
-   //const {nameList} = this.state;
-   return null;
-   /*return (
-      <ul>
-        { 
-        nameList.map(user => <li>{user.name}</li>)
-        }
-      </ul>
-    )*/
-  }
-}
+	GetValueFunction = () =>{
+		this.setState({AnswerText:null});
+		const { TextInputValueSource,TextInputValueDestination }  = this.state ;
+		Alert.alert(TextInputValueSource+" "+TextInputValueDestination);
+		fetch('http://192.168.43.231:5000/routes?src='+TextInputValueSource+'&dest='+TextInputValueDestination)
+		.then((response) => response.json())
+    			.then((responseJson) => {
+      				console.log(responseJson);
+      				this.setState({AnswerText:JSON.stringify(responseJson)});
+    			})
+    		.catch((error) => {
+      			console.error(error);
+    		});
+     	}  
+  
+	render() {  
+		return (
+		<ScrollView>  
+      			<View style={styles.container}>  
+        		<TextInput  
+          			style={styles.textInputStyle}  
+          			onChangeText={(TextInputValueSource) => this.setState({TextInputValueSource})}  
+          			placeholder="enter source"  
+          			placeholderTextColor="red"  
+        		/>  
+        		<TextInput  
+          			style={styles.textInputStyle}  
+          			onChangeText={(TextInputValueDestination) => this.setState({TextInputValueDestination})}  
+          			placeholder="enter destination"  
+          			placeholderTextColor="red"  
+        		/>  
+         		<Button title="Find Routes" onPress={this.GetValueFunction} color="#2196F3" />
+         		<Text>{this.state.AnswerText}</Text>
+      			</View>
+      		</ScrollView>  
+    		);  
+  	}  
+}  
+  
+const styles = StyleSheet.create({  
+	container: {  
+    		flex: 1  
+  	},  
+  	textInputStyle: {  
+    		borderColor: '#9a73ef',  
+    		borderWidth: 1,  
+    		height: 40,  
+    		margin: 20,  
+    		padding: 10,  
+  	},  
+  	textOutputStyle: {  
+    		fontSize: 20  
+  	}  
+})  
+  
+export default App;  
