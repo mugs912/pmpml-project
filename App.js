@@ -6,20 +6,27 @@ class App extends Component {
 		super(props)
 		this.state = {
 			AnswerText:'helloo all',
+			AnswerText1:'hellooo',
 			TextInputValueSource: '',
 			TextInputValueDestination: '',
 		}
 	}
 
 	GetValueFunction = () =>{
+		let routes=[];
 		this.setState({AnswerText:null});
 		const { TextInputValueSource,TextInputValueDestination }  = this.state ;
 		Alert.alert(TextInputValueSource+" "+TextInputValueDestination);
 		fetch('http://192.168.43.231:5000/routes?src='+TextInputValueSource+'&dest='+TextInputValueDestination)
 		.then((response) => response.json())
     			.then((responseJson) => {
+      				responseJson.map((ele)=>routes.push(ele.route));
+      				console.log(routes);
+      				console.log("Length of array is:"+routes.length);
       				console.log(responseJson);
       				this.setState({AnswerText:JSON.stringify(responseJson)});
+      				this.setState({AnswerText1:String(routes)});
+      				
     			})
     		.catch((error) => {
       			console.error(error);
@@ -44,6 +51,7 @@ class App extends Component {
         		/>  
          		<Button title="Find Routes" onPress={this.GetValueFunction} color="#2196F3" />
          		<Text>{this.state.AnswerText}</Text>
+         		<Text>{this.state.AnswerText1}</Text>
       			</View>
       		</ScrollView>  
     		);  
