@@ -13,7 +13,7 @@ const pool=new Pool({
 
 var rid_stops=[];
 var counter=0;
-const stop_query="select stop_name from stops where stop_id in(select stop_id from routes where route_id=$1 and stop_seq>=$2 and stop_seq<=$3 order by stop_seq);"
+const stop_query="select stop_name,stop_seq from stops,routes where stops.stop_id in(select stop_id from routes where route_id=$1 and stop_seq>=$2 and stop_seq<=$3)and stops.stop_id=routes.stop_id and routes.stop_seq>=$2 and routes.stop_seq<=$3 and routes.route_id=$1 order by stop_seq;"
 const query="select r1.route_id, r1.stop_seq as R1Stop, r2.stop_seq as R2Stop from routes r1, routes r2 where r1.route_id=r2.route_id and r1.route_id in(select route_id from routes where r2.stop_id in(select stop_id from stops where stop_name=$1)) and r1.stop_id in(select stop_id from stops where stop_name=$2) and r1.stop_seq > r2.stop_seq";
 
 app.get('/routes',(req,response)=>{
