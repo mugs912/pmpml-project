@@ -56,13 +56,14 @@ app.get('/routes',(req,response)=>{
                 else
                     btwnstops.push(result.rows[j].source_stop_name); 
             }
+            console.log(btwnstops);
             for(k=0;k<btwnstops.length;++k){
                 let btstop=btwnstops[k];	
                 pool.query(direct_current_time_query,[source,btstop],function(err,routes){
-                    try{
-                        if(routes.rows.length==0)
-                            throw new Error('no indirect routes at this time');
+                    console.log('routes=',routes.rows);
+                    if(routes.rows.length!=0){
                         pool.query(direct_time_query,[btstop,destination,routes.rows[0].desttime,limit],function(err,nextroute){
+                            console.log('nextroutes=',nextroute.rows);
                             for(nr=0;nr<nextroute.rows.length;++nr)
                                 indirect_routes.push([{'route':routes.rows[0].route_id,'source':source,'destination':btstop,'srcseq':routes.rows[0].sourceseq,'destseq':routes.rows[0].destseq,'source_arrival_time':routes.rows[0].sourcetime,'destination_arrival_time':routes.rows[0].desttime},{'route':nextroute.rows[nr].route_id,'source':btstop,'destination':destination,'srcseq':nextroute.rows[nr].sourceseq,'destseq':nextroute.rows[nr].destseq,'source_arrival_time':nextroute.rows[nr].sourcetime,'destination_arrival_time':nextroute.rows[nr].desttime}]);
                             if(kcounter==btwnstops.length-1){
@@ -174,36 +175,119 @@ app.get('/routes',(req,response)=>{
                             kcounter++;
                         });
                     }
-                    catch(err){
-                        for(dr=0;dr<direct_routes.length;++dr){
-                            let rid0=all_routes[ar].route;
-                            let sseq0=all_routes[ar].srcseq;
-                            let dseq0=all_routes[ar].destseq;
-                            let src0=all_routes[ar].source;
-                            let dest0=all_routes[ar].destination;
-                            let st0=all_routes[ar].source_arrival_time;
-                            let dt0=all_routes[ar].destination_arrival_time;
-
-                            pool.query(stop_query,[rid0,sseq0,dseq0],function(err,fstops){
-                                var firststops=[];
-                                for(sp=0;sp<fstops.rows.length;++sp)
-                                    firststops.push({'stop':fstops.rows[sp].stop_name,'latitude':fstops.rows[sp].latitude,'longitude':fstops.rows[sp].longitude});
-                                pool.query(from_query,[rid0],function(err,ffrom){
-                                    pool.query(to_query,[rid0],function(err,fto){
-                                        rid_stops.push({'route':rid0,'from':ffrom.rows[0].stop_name,'to':fto.rows[0].stop_name,'source':src0,'destination':dest0,'source_arrival_time':st0,'destination_arrival_time':dt0,'stops':firststops});
-                                        if(rid_stops.length==direct_routes.length){
-                                            console.log('rid stops = ',rid_stops);
-                                            console.log('length of rid stops = ',rid_stops.length);
-                                            response.send(rid_stops);
-                                        }
-                                    });
-                                });
+                    else{
+                        if(kcounter==btwnstops.length-1){
+                            all_routes=direct_routes.concat(indirect_routes);
+                            all_routes.sort(function(a,b){
+                                if(a.length==2)
+                                    var dateA = moment(a[1].destination_arrival_time, 'HH:mm:ss');
+                                else
+                                    var dateA = moment(a.destination_arrival_time, 'HH:mm:ss');
+                                if(b.length==2)
+                                    var dateB = moment(b[1].destination_arrival_time, 'HH:mm:ss');
+                                else
+                                    var dateB = moment(b.destination_arrival_time, 'HH:mm:ss');
+                                return dateA - dateB;
                             });
+                            if(all_routes.length<3)
+                                n=all_routes.length;
+                            for(ar=0;ar<n;++ar){
+                                if(all_routes[ar].length==2){
+                                    let rid0=all_routes[ar][0].route;
+                                    let rid1=all_routes[ar][1].route;
+                                    let sseq0=all_routes[ar][0].srcseq;
+                                    let sseq1=all_routes[ar][1].srcseq;
+                                    let dseq0=all_routes[ar][0].destseq;
+                                    let dseq1=all_routes[ar][1].destseq;
+                                    let src0=all_routes[ar][0].source;
+                                    let src1=all_routes[ar][1].source;
+                                    let dest0=all_routes[ar][0].destination;
+                                    let dest1=all_routes[ar][1].destination;
+                                    let st0=all_routes[ar][0].source_arrival_time;
+                                    let st1=all_routes[ar][1].source_arrival_time;
+                                    let dt0=all_routes[ar][0].destination_arrival_time;
+                                    let dt1=all_routes[ar][1].destination_arrival_time;
+
+                                    pool.query(stop_query,[rid0,sseq0,dseq0],function(err,fstops){
+                                        var firststops=[];
+                                        var secondstops=[];
+                                        for(sp=0;sp<fstops.rows.length;++sp)
+                                            firststops.push({'stop':fstops.rows[sp].stop_name,'latitude':fstops.rows[sp].latitude,'longitude':fstops.rows[sp].longitude});
+                                        pool.query(stop_query,[rid1,sseq1,dseq1],function(err,sstops){
+                                            for(sp=0;sp<sstops.rows.length;++sp)
+                                                secondstops.push({'stop':sstops.rows[sp].stop_name,'latitude':sstops.rows[sp].latitude,'longitude':sstops.rows[sp].longitude});
+                                            pool.query(from_query,[rid0],function(err,ffrom){
+                                                pool.query(to_query,[rid0],function(err,fto){
+                                                    pool.query(from_query,[rid1],function(err,sfrom){
+                                                        pool.query(to_query,[rid1],function(err,sto){
+                                                            rid_stops.push([{'route':rid0,'from':ffrom.rows[0].stop_name,'to':fto.rows[0].stop_name,'source':src0,'destination':dest0,'source_arrival_time':st0,'destination_arrival_time':dt0,'stops':firststops},{'route':rid1,'from':sfrom.rows[0].stop_name,'to':sto.rows[0].stop_name,'source':src1,'destination':dest1,'source_arrival_time':st1,'destination_arrival_time':dt1,'stops':secondstops}]);
+                                                            if(rid_stops.length==n){
+                                                                rid_stops.sort(function(a,b){
+                                                                    if(a.length==2)
+                                                                        var dateA = moment(a[1].destination_arrival_time, 'HH:mm:ss');
+                                                                    else
+                                                                        var dateA = moment(a.destination_arrival_time, 'HH:mm:ss');
+                                                                    if(b.length==2)
+                                                                        var dateB = moment(b[1].destination_arrival_time, 'HH:mm:ss');
+                                                                    else
+                                                                        var dateB = moment(b.destination_arrival_time, 'HH:mm:ss');
+                                                                    return dateA - dateB;
+                                                                });
+                                                                console.log('rid stops = ',rid_stops);
+                                                                console.log('length of rid stops = ',rid_stops.length);
+                                                                response.send(rid_stops);
+                                                            }
+                                                        });
+                                                    });
+                                                });
+                                            });
+                                        });
+                                    });
+                                }
+                                else{
+                                    let rid0=all_routes[ar].route;
+                                    let sseq0=all_routes[ar].srcseq;
+                                    let dseq0=all_routes[ar].destseq;
+                                    let src0=all_routes[ar].source;
+                                    let dest0=all_routes[ar].destination;
+                                    let st0=all_routes[ar].source_arrival_time;
+                                    let dt0=all_routes[ar].destination_arrival_time;
+
+                                    pool.query(stop_query,[rid0,sseq0,dseq0],function(err,fstops){
+                                        var firststops=[];
+                                        for(sp=0;sp<fstops.rows.length;++sp)
+                                            firststops.push({'stop':fstops.rows[sp].stop_name,'latitude':fstops.rows[sp].latitude,'longitude':fstops.rows[sp].longitude});
+                                        pool.query(from_query,[rid0],function(err,ffrom){
+                                            pool.query(to_query,[rid0],function(err,fto){
+                                                rid_stops.push({'route':rid0,'from':ffrom.rows[0].stop_name,'to':fto.rows[0].stop_name,'source':src0,'destination':dest0,'source_arrival_time':st0,'destination_arrival_time':dt0,'stops':firststops});
+                                                if(rid_stops.length==n){
+                                                    rid_stops.sort(function(a,b){
+                                                        if(a.length==2)
+                                                            var dateA = moment(a[1].destination_arrival_time, 'HH:mm:ss');
+                                                        else
+                                                            var dateA = moment(a.destination_arrival_time, 'HH:mm:ss');
+                                                        if(b.length==2)
+                                                            var dateB = moment(b[1].destination_arrival_time, 'HH:mm:ss');
+                                                        else
+                                                            var dateB = moment(b.destination_arrival_time, 'HH:mm:ss');
+                                                        return dateA - dateB;
+                                                    });
+                                                    console.log('rid stops = ',rid_stops);
+                                                    console.log('length of rid stops = ',rid_stops.length);
+                                                    response.send(rid_stops);
+                                                }
+                                            });
+                                        });
+                                    });
+                                }
+                            }
                         }
+                        kcounter++;
                     }
                 });          
-            } 
+            }
         });
     });
 });
 app.listen(5000,()=>console.log('listening on port 5000'));
+
