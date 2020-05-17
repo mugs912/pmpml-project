@@ -18,7 +18,7 @@ const from_query="select stop_name from stops where stop_id in(select source_sto
 
 const to_query="select stop_name from stops where stop_id in(select destination_stop_id from route_master where route_id=$1)";
 
-const direct_current_time_query="SELECT a1.route_id,a1.trip_id,a1.stop_id,a1.stop_seq as sourceseq,a1.arrivaltime as sourcetime,a2.stop_id,a2.stop_seq as destseq,a2.arrivaltime as desttime from arrivaltime a1 join arrivaltime a2 on a1.trip_id=a2.trip_id WHERE a1.trip_id in (SELECT DISTINCT arrivaltime.trip_id from arrivaltime where route_id in( select r1.route_id from routes r1, routes r2 where r1.route_id=r2.route_id and r1.route_id in(select route_id from routes where r2.stop_id in(select stop_id from stops where stop_name=$1)) and r1.stop_id in(select stop_id from stops where stop_name=$2) and r1.stop_seq > r2.stop_seq))and a2.trip_id in(SELECT DISTINCT arrivaltime.trip_id from arrivaltime where route_id in( select r1.route_id from routes r1, routes r2 where r1.route_id=r2.route_id and r1.route_id in(select route_id from routes where r2.stop_id in(select stop_id from stops where stop_name=$1)) and r1.stop_id in(select stop_id from stops where stop_name=$2) and r1.stop_seq > r2.stop_seq))and a1.stop_id in(select stop_id from stops where stop_name=$1)and a2.stop_id in(select stop_id from stops where stop_name=$2)and a1.arrivaltime > (select current_time) order by a1.arrivaltime limit 3";
+const direct_current_time_query="SELECT a1.route_id,a1.trip_id,a1.stop_id,a1.stop_seq as sourceseq,a1.arrivaltime as sourcetime,a2.stop_id,a2.stop_seq as destseq,a2.arrivaltime as desttime from arrivaltime a1 join arrivaltime a2 on a1.trip_id=a2.trip_id WHERE a1.trip_id in (SELECT DISTINCT arrivaltime.trip_id from arrivaltime where route_id in( select r1.route_id from routes r1, routes r2 where r1.route_id=r2.route_id and r1.route_id in(select route_id from routes where r2.stop_id in(select stop_id from stops where stop_name=$1)) and r1.stop_id in(select stop_id from stops where stop_name=$2) and r1.stop_seq > r2.stop_seq))and a2.trip_id in(SELECT DISTINCT arrivaltime.trip_id from arrivaltime where route_id in( select r1.route_id from routes r1, routes r2 where r1.route_id=r2.route_id and r1.route_id in(select route_id from routes where r2.stop_id in(select stop_id from stops where stop_name=$1)) and r1.stop_id in(select stop_id from stops where stop_name=$2) and r1.stop_seq > r2.stop_seq))and a1.stop_id in(select stop_id from stops where stop_name=$1)and a2.stop_id in(select stop_id from stops where stop_name=$2)and a1.arrivaltime > '18:30:00' order by a1.arrivaltime limit 3";
 
 const direct_time_query="SELECT a1.route_id,a1.trip_id,a1.stop_id,a1.stop_seq as sourceseq,a1.arrivaltime as sourcetime,a2.stop_id,a2.stop_seq as destseq,a2.arrivaltime as desttime from arrivaltime a1 join arrivaltime a2 on a1.trip_id=a2.trip_id WHERE a1.trip_id in (SELECT DISTINCT arrivaltime.trip_id from arrivaltime where route_id in( select r1.route_id from routes r1, routes r2 where r1.route_id=r2.route_id and r1.route_id in(select route_id from routes where r2.stop_id in(select stop_id from stops where stop_name=$1)) and r1.stop_id in(select stop_id from stops where stop_name=$2) and r1.stop_seq > r2.stop_seq))and a2.trip_id in(SELECT DISTINCT arrivaltime.trip_id from arrivaltime where route_id in( select r1.route_id from routes r1, routes r2 where r1.route_id=r2.route_id and r1.route_id in(select route_id from routes where r2.stop_id in(select stop_id from stops where stop_name=$1)) and r1.stop_id in(select stop_id from stops where stop_name=$2) and r1.stop_seq > r2.stop_seq))and a1.stop_id in(select stop_id from stops where stop_name=$1)and a2.stop_id in(select stop_id from stops where stop_name=$2)and a1.arrivaltime > $3 order by a1.arrivaltime limit $4";
 
@@ -27,8 +27,10 @@ const freq_query="select valid_max_freq($1,$2)";
 const indirect_query="select source_stop_name,destination_stop_name from route_frequency where freq=$1 and (source_stop_name=$2 or destination_stop_name=$2)";
 
 app.get('/routes',(req,response)=>{
-    rid_stops=[];
+    rid_stops={};
     direct_routes=[];
+    final_direct_routes=[];
+    final_indirect_routes=[];
     indirect_routes=[];
     btwnstops=[];
     n=3;
@@ -56,18 +58,20 @@ app.get('/routes',(req,response)=>{
                 else
                     btwnstops.push(result.rows[j].source_stop_name); 
             }
-            console.log(btwnstops);
             for(k=0;k<btwnstops.length;++k){
                 let btstop=btwnstops[k];	
                 pool.query(direct_current_time_query,[source,btstop],function(err,routes){
-                    console.log('routes=',routes.rows);
                     if(routes.rows.length!=0){
                         pool.query(direct_time_query,[btstop,destination,routes.rows[0].desttime,limit],function(err,nextroute){
-                            console.log('nextroutes=',nextroute.rows);
                             for(nr=0;nr<nextroute.rows.length;++nr)
                                 indirect_routes.push([{'route':routes.rows[0].route_id,'source':source,'destination':btstop,'srcseq':routes.rows[0].sourceseq,'destseq':routes.rows[0].destseq,'source_arrival_time':routes.rows[0].sourcetime,'destination_arrival_time':routes.rows[0].desttime},{'route':nextroute.rows[nr].route_id,'source':btstop,'destination':destination,'srcseq':nextroute.rows[nr].sourceseq,'destseq':nextroute.rows[nr].destseq,'source_arrival_time':nextroute.rows[nr].sourcetime,'destination_arrival_time':nextroute.rows[nr].desttime}]);
                             if(kcounter==btwnstops.length-1){
                                 all_routes=direct_routes.concat(indirect_routes);
+                                if(all_routes.length==0){
+                                    console.log('rid stops = ',rid_stops);
+                                    console.log('length of rid stops = ',rid_stops.length);
+                                    response.send(rid_stops);
+                                }
                                 all_routes.sort(function(a,b){
                                     if(a.length==2)
                                         var dateA = moment(a[1].destination_arrival_time, 'HH:mm:ss');
@@ -110,19 +114,9 @@ app.get('/routes',(req,response)=>{
                                                     pool.query(to_query,[rid0],function(err,fto){
                                                         pool.query(from_query,[rid1],function(err,sfrom){
                                                             pool.query(to_query,[rid1],function(err,sto){
-                                                                rid_stops.push([{'route':rid0,'from':ffrom.rows[0].stop_name,'to':fto.rows[0].stop_name,'source':src0,'destination':dest0,'source_arrival_time':st0,'destination_arrival_time':dt0,'stops':firststops},{'route':rid1,'from':sfrom.rows[0].stop_name,'to':sto.rows[0].stop_name,'source':src1,'destination':dest1,'source_arrival_time':st1,'destination_arrival_time':dt1,'stops':secondstops}]);
-                                                                if(rid_stops.length==n){
-                                                                    rid_stops.sort(function(a,b){
-                                                                        if(a.length==2)
-                                                                            var dateA = moment(a[1].destination_arrival_time, 'HH:mm:ss');
-                                                                        else
-                                                                            var dateA = moment(a.destination_arrival_time, 'HH:mm:ss');
-                                                                        if(b.length==2)
-                                                                            var dateB = moment(b[1].destination_arrival_time, 'HH:mm:ss');
-                                                                        else
-                                                                            var dateB = moment(b.destination_arrival_time, 'HH:mm:ss');
-                                                                        return dateA - dateB;
-                                                                    });
+                                                                final_indirect_routes.push([{'route':rid0,'from':ffrom.rows[0].stop_name,'to':fto.rows[0].stop_name,'source':src0,'destination':dest0,'source_arrival_time':st0,'destination_arrival_time':dt0,'stops':firststops},{'route':rid1,'from':sfrom.rows[0].stop_name,'to':sto.rows[0].stop_name,'source':src1,'destination':dest1,'source_arrival_time':st1,'destination_arrival_time':dt1,'stops':secondstops}]);
+                                                                if((final_direct_routes.length+final_indirect_routes.length)==n){
+                                                                    rid_stops={'direct':final_direct_routes,'indirect':final_indirect_routes};
                                                                     console.log('rid stops = ',rid_stops);
                                                                     console.log('length of rid stops = ',rid_stops.length);
                                                                     response.send(rid_stops);
@@ -149,19 +143,9 @@ app.get('/routes',(req,response)=>{
                                                 firststops.push({'stop':fstops.rows[sp].stop_name,'latitude':fstops.rows[sp].latitude,'longitude':fstops.rows[sp].longitude});
                                             pool.query(from_query,[rid0],function(err,ffrom){
                                                 pool.query(to_query,[rid0],function(err,fto){
-                                                    rid_stops.push({'route':rid0,'from':ffrom.rows[0].stop_name,'to':fto.rows[0].stop_name,'source':src0,'destination':dest0,'source_arrival_time':st0,'destination_arrival_time':dt0,'stops':firststops});
-                                                    if(rid_stops.length==n){
-                                                        rid_stops.sort(function(a,b){
-                                                            if(a.length==2)
-                                                                var dateA = moment(a[1].destination_arrival_time, 'HH:mm:ss');
-                                                            else
-                                                                var dateA = moment(a.destination_arrival_time, 'HH:mm:ss');
-                                                            if(b.length==2)
-                                                                var dateB = moment(b[1].destination_arrival_time, 'HH:mm:ss');
-                                                            else
-                                                                var dateB = moment(b.destination_arrival_time, 'HH:mm:ss');
-                                                            return dateA - dateB;
-                                                        });
+                                                    final_direct_routes.push({'route':rid0,'from':ffrom.rows[0].stop_name,'to':fto.rows[0].stop_name,'source':src0,'destination':dest0,'source_arrival_time':st0,'destination_arrival_time':dt0,'stops':firststops});
+                                                    if((final_direct_routes.length+final_indirect_routes.length)==n){
+                                                        rid_stops={'direct':final_direct_routes,'indirect':final_indirect_routes};
                                                         console.log('rid stops = ',rid_stops);
                                                         console.log('length of rid stops = ',rid_stops.length);
                                                         response.send(rid_stops);
@@ -178,6 +162,11 @@ app.get('/routes',(req,response)=>{
                     else{
                         if(kcounter==btwnstops.length-1){
                             all_routes=direct_routes.concat(indirect_routes);
+                            if(all_routes.length==0){
+                                console.log('rid stops = ',rid_stops);
+                                console.log('length of rid stops = ',rid_stops.length);
+                                response.send(rid_stops,direct_routes);
+                            }
                             all_routes.sort(function(a,b){
                                 if(a.length==2)
                                     var dateA = moment(a[1].destination_arrival_time, 'HH:mm:ss');
@@ -220,19 +209,9 @@ app.get('/routes',(req,response)=>{
                                                 pool.query(to_query,[rid0],function(err,fto){
                                                     pool.query(from_query,[rid1],function(err,sfrom){
                                                         pool.query(to_query,[rid1],function(err,sto){
-                                                            rid_stops.push([{'route':rid0,'from':ffrom.rows[0].stop_name,'to':fto.rows[0].stop_name,'source':src0,'destination':dest0,'source_arrival_time':st0,'destination_arrival_time':dt0,'stops':firststops},{'route':rid1,'from':sfrom.rows[0].stop_name,'to':sto.rows[0].stop_name,'source':src1,'destination':dest1,'source_arrival_time':st1,'destination_arrival_time':dt1,'stops':secondstops}]);
-                                                            if(rid_stops.length==n){
-                                                                rid_stops.sort(function(a,b){
-                                                                    if(a.length==2)
-                                                                        var dateA = moment(a[1].destination_arrival_time, 'HH:mm:ss');
-                                                                    else
-                                                                        var dateA = moment(a.destination_arrival_time, 'HH:mm:ss');
-                                                                    if(b.length==2)
-                                                                        var dateB = moment(b[1].destination_arrival_time, 'HH:mm:ss');
-                                                                    else
-                                                                        var dateB = moment(b.destination_arrival_time, 'HH:mm:ss');
-                                                                    return dateA - dateB;
-                                                                });
+                                                            final_indirect_routes.push([{'route':rid0,'from':ffrom.rows[0].stop_name,'to':fto.rows[0].stop_name,'source':src0,'destination':dest0,'source_arrival_time':st0,'destination_arrival_time':dt0,'stops':firststops},{'route':rid1,'from':sfrom.rows[0].stop_name,'to':sto.rows[0].stop_name,'source':src1,'destination':dest1,'source_arrival_time':st1,'destination_arrival_time':dt1,'stops':secondstops}]);
+                                                            if((final_direct_routes.length+final_indirect_routes.length)==n){
+                                                                rid_stops={'direct':final_direct_routes,'indirect':final_indirect_routes};
                                                                 console.log('rid stops = ',rid_stops);
                                                                 console.log('length of rid stops = ',rid_stops.length);
                                                                 response.send(rid_stops);
@@ -259,19 +238,9 @@ app.get('/routes',(req,response)=>{
                                             firststops.push({'stop':fstops.rows[sp].stop_name,'latitude':fstops.rows[sp].latitude,'longitude':fstops.rows[sp].longitude});
                                         pool.query(from_query,[rid0],function(err,ffrom){
                                             pool.query(to_query,[rid0],function(err,fto){
-                                                rid_stops.push({'route':rid0,'from':ffrom.rows[0].stop_name,'to':fto.rows[0].stop_name,'source':src0,'destination':dest0,'source_arrival_time':st0,'destination_arrival_time':dt0,'stops':firststops});
-                                                if(rid_stops.length==n){
-                                                    rid_stops.sort(function(a,b){
-                                                        if(a.length==2)
-                                                            var dateA = moment(a[1].destination_arrival_time, 'HH:mm:ss');
-                                                        else
-                                                            var dateA = moment(a.destination_arrival_time, 'HH:mm:ss');
-                                                        if(b.length==2)
-                                                            var dateB = moment(b[1].destination_arrival_time, 'HH:mm:ss');
-                                                        else
-                                                            var dateB = moment(b.destination_arrival_time, 'HH:mm:ss');
-                                                        return dateA - dateB;
-                                                    });
+                                                final_direct_routes.push({'route':rid0,'from':ffrom.rows[0].stop_name,'to':fto.rows[0].stop_name,'source':src0,'destination':dest0,'source_arrival_time':st0,'destination_arrival_time':dt0,'stops':firststops});
+                                                if((final_direct_routes.length+final_indirect_routes.length)==n){
+                                                    rid_stops={'direct':final_direct_routes,'indirect':final_indirect_routes};
                                                     console.log('rid stops = ',rid_stops);
                                                     console.log('length of rid stops = ',rid_stops.length);
                                                     response.send(rid_stops);
